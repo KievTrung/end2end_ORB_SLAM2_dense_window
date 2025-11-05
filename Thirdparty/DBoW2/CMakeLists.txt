@@ -1,0 +1,81 @@
+cmake_minimum_required(VERSION 3.10) 
+project(DBoW2)
+
+SET(CMAKE_BUILD_TYPE RelWithDebInfo)
+message(status "build type: ${CMAKE_BUILD_TYPE}")
+
+if(MSVC)
+  if(CMAKE_CXX_FLAGS MATCHES "/W[0-4]")
+    string(REGEX REPLACE "/W[0-4]" "/W4" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+  else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4")
+  endif()
+elseif(CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -pedantic")
+endif()
+
+
+set(LIB_SHARED "SHARED")
+if(WIN32)
+    set(LIB_SHARED "STATIC")
+endif(WIN32)
+
+
+if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+    set(WINDOWS TRUE)
+
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Mp")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /W3")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /WX-")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Gd")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd")
+
+    SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2")
+    SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Ob1")
+    SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Oi")
+    SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Ot")
+    SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Oy")
+    SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /GL")
+    SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Zi")
+    SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD")
+    SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Gd")
+endif()
+
+
+
+set(HDRS_DBOW2
+  DBoW2/BowVector.h
+  DBoW2/FORB.h 
+  DBoW2/FClass.h       
+  DBoW2/FeatureVector.h
+  DBoW2/ScoringObject.h   
+  DBoW2/TemplatedVocabulary.h)
+set(SRCS_DBOW2
+  DBoW2/BowVector.cpp
+  DBoW2/FORB.cpp      
+  DBoW2/FeatureVector.cpp
+  DBoW2/ScoringObject.cpp)
+
+set(HDRS_DUTILS
+  DUtils/Random.h
+  DUtils/Timestamp.h)
+set(SRCS_DUTILS
+  DUtils/Random.cpp
+  DUtils/Timestamp.cpp)
+
+find_package(OpenCV 3.0 QUIET)
+if(NOT OpenCV_FOUND)
+   find_package(OpenCV 2.4.3 QUIET)
+   if(NOT OpenCV_FOUND)
+      message(FATAL_ERROR "OpenCV > 2.4.3 not found.")
+   endif()
+endif()
+
+set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
+
+include_directories(${OpenCV_INCLUDE_DIRS})
+add_library(DBoW2 ${LIB_SHARED} ${SRCS_DBOW2} ${SRCS_DUTILS})
+target_link_libraries(DBoW2 ${OpenCV_LIBS})
+
+
