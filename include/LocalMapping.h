@@ -110,6 +110,7 @@ protected:
     std::list<cv::Mat> mlColorImgs;
     std::list<cv::Mat> mlDepthImgs;
 
+
     KeyFrame* mpCurrentKeyFrame;
     cv::Mat mCurrentColorImg;
     cv::Mat mCurrentDepthImg;

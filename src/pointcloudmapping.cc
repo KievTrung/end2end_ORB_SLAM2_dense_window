@@ -24,6 +24,7 @@
 #include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/io/pcd_io.h>
+#include <chrono>
 #include "Converter.h"
 
 PointCloudMapping::PointCloudMapping(double resolution_)
@@ -55,6 +56,17 @@ void PointCloudMapping::insertKeyFrame(KeyFrame* kf, cv::Mat& color, cv::Mat& de
     keyFrameUpdated.notify_one();
 }
 
+void PointCloudMapping::AddGBAKeyFrameId(int nmId) 
+{
+    unique_lock<mutex> lock(GBAKFmutex);
+    mvGBAKFs.insert(nmId);
+}
+
+void PointCloudMapping::setGBAState(GBAState s){
+	unique_lock<std::mutex> lock(GBAMutex);
+    meGBAState = s;
+}
+
 pcl::PointCloud< PointCloudMapping::PointT >::Ptr PointCloudMapping::generatePointCloud(KeyFrame* kf, cv::Mat& color, cv::Mat& depth)
 {
     PointCloud::Ptr tmp( new PointCloud() );
@@ -83,8 +95,7 @@ pcl::PointCloud< PointCloudMapping::PointT >::Ptr PointCloudMapping::generatePoi
     PointCloud::Ptr cloud(new PointCloud);
     pcl::transformPointCloud( *tmp, *cloud, T.inverse().matrix());
     cloud->is_dense = false;
-    
-    cout<<"generate point cloud for kf "<<kf->mnFrameId<<", size="<<cloud->points.size()<<endl;
+
     return cloud;
 }
 
@@ -92,6 +103,16 @@ pcl::PointCloud< PointCloudMapping::PointT >::Ptr PointCloudMapping::generatePoi
 void PointCloudMapping::viewer()
 {
     pcl::visualization::CloudViewer viewer("viewer");
+
+    // voxel filter
+	pcl::VoxelGrid<PointT> voxel_filter;
+	double resolution = 0.015;
+	voxel_filter.setLeafSize(resolution, resolution, resolution);
+
+	pcl::StatisticalOutlierRemoval<PointT> statistical_filter;
+	statistical_filter.setMeanK(45);
+	statistical_filter.setStddevMulThresh(1.0);
+
     while(1)
     {
         {
@@ -119,29 +140,71 @@ void PointCloudMapping::viewer()
             PointCloud::Ptr p = generatePointCloud( keyframes[i], colorImgs[i], depthImgs[i] );
 
 			PointCloud::Ptr tmp(new PointCloud());
-			pcl::StatisticalOutlierRemoval<PointT> statistical_filter;
-			statistical_filter.setMeanK(50);
-			statistical_filter.setStddevMulThresh(1.0);
 			statistical_filter.setInputCloud(p);
 			statistical_filter.filter(*tmp);
 
 			(*globalMap) += *tmp;
+            
+            tmp = std::make_shared<PointCloud>();
+			voxel_filter.setInputCloud(globalMap);
+			voxel_filter.filter(*tmp);
+			tmp->swap(*globalMap);
         }
 
-        cout << "show cloud ..." << endl;
         viewer.showCloud( globalMap );
         lastKeyframeSize = N;
     }
 
-    // voxel filter
-	pcl::VoxelGrid<PointT> voxel_filter;
-	double resolution = 0.012;
+
+    { 
+        unique_lock<std::mutex> lock(GBAMutex);
+        if (meGBAState == NOT_ACTIVE) {
+			cout << "saving map ..." << endl;
+			pcl::io::savePCDFileBinary("map.pcd", *globalMap);
+			cout << "saved ..." << endl;
+            return;
+        }
+        else {
+			cout << "wait for GBA to finish.." << endl;
+			while(meGBAState == RUNNING)
+				std::this_thread::sleep_for(std::chrono::seconds(1)); 
+        }
+    }   
+
+    
+    cout << "redraw global map.." << endl;
+    globalMap->clear();
+
+	statistical_filter.setMeanK(30);
+	resolution = 0.017;
 	voxel_filter.setLeafSize(resolution, resolution, resolution);
 
-	PointCloud::Ptr tmp(new PointCloud);
+	for ( size_t i=0; i<keyframes.size(); i++ )
+	{
+        KeyFrame* pKF = keyframes[i];
 
-	voxel_filter.setInputCloud(globalMap);
-	voxel_filter.filter(*tmp);
+        if (mvGBAKFs.find(pKF->mnId) != mvGBAKFs.end()) {
+			PointCloud::Ptr p = generatePointCloud( pKF, colorImgs[i], depthImgs[i] );
+
+			PointCloud::Ptr tmp(new PointCloud());
+			pcl::StatisticalOutlierRemoval<PointT> statistical_filter;
+			statistical_filter.setInputCloud(p);
+			statistical_filter.filter(*tmp);
+
+			(*globalMap) += *tmp;
+			
+			tmp = std::make_shared<PointCloud>();
+			voxel_filter.setInputCloud(globalMap);
+			voxel_filter.filter(*tmp);
+			tmp->swap(*globalMap);
+
+			viewer.showCloud( globalMap );
+        }
+	}
+
+	PointCloud::Ptr tmp(new PointCloud());
+	statistical_filter.setInputCloud(globalMap);
+	statistical_filter.filter(*tmp);
 	tmp->swap(*globalMap);
 
     cout << "saving map ..." << endl;

@@ -55,6 +55,8 @@ class Tracking
 {  
 
 public:
+    int kfcount = 0;
+
 	Tracking(System* pSys, ORBVocabulary* pVoc, FrameDrawer* pFrameDrawer, MapDrawer* pMapDrawer, Map* pMap,
              KeyFrameDatabase* pKFDB, const string &strSettingPath, const int sensor);
 

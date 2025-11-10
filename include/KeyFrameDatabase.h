@@ -57,6 +57,9 @@ public:
    // Relocalization
    std::vector<KeyFrame*> DetectRelocalizationCandidates(Frame* F);
 
+
+    int kfcount;
+
 protected:
 
   // Associated vocabulary

@@ -23,6 +23,8 @@
 #include "ORBmatcher.h"
 #include "Optimizer.h"
 #include <OSSpecific.h>
+#include <thread>
+#include <chrono>
 
 #include<mutex>
 
@@ -51,7 +53,6 @@ void LocalMapping::Run()
 {
 
     mbFinished = false;
-
     while(1)
     {
         // Tracking will see that Local Mapping is busy
@@ -111,7 +112,7 @@ void LocalMapping::Run()
             break;
 
         //fix sleeping
-        //usleep(100);
+		std::this_thread::sleep_for(std::chrono::milliseconds(50)); 
     }
 
     SetFinish();

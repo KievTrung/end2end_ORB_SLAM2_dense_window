@@ -36,10 +36,11 @@
 namespace ORB_SLAM2
 {
 
-LoopClosing::LoopClosing(Map *pMap, KeyFrameDatabase *pDB, ORBVocabulary *pVoc, const bool bFixScale):
+LoopClosing::LoopClosing(Map *pMap, KeyFrameDatabase *pDB, ORBVocabulary *pVoc, const bool bFixScale, shared_ptr<PointCloudMapping> pPointCloud):
     mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
     mpKeyFrameDB(pDB), mpORBVocabulary(pVoc), mpMatchedKF(NULL), mLastLoopKFid(0), mbRunningGBA(false), mbFinishedGBA(true),
-    mbStopGBA(false), mpThreadGBA(NULL), mbFixScale(bFixScale), mnFullBAIdx(0)
+    mbStopGBA(false), mpThreadGBA(NULL), mbFixScale(bFixScale), mnFullBAIdx(0),
+    mpPointCloudMapping( pPointCloud )
 {
     mnCovisibilityConsistencyTh = 3;
 }
@@ -82,7 +83,7 @@ void LoopClosing::Run()
         if(CheckFinish())
             break;
 
-        usleep(5000);
+        usleep(1000);
     }
 
     SetFinish();
@@ -220,19 +221,12 @@ bool LoopClosing::DetectLoop()
         mpCurrentKF->SetErase();
         return false;
     }
-    else
-    {
-        return true;
-    }
-
-    mpCurrentKF->SetErase();
-    return false;
+	return true;
 }
 
 bool LoopClosing::ComputeSim3()
 {
     // For each consistent loop candidate we try to compute a Sim3
-
     const int nInitialCandidates = mvpEnoughConsistentCandidates.size();
 
     // We compute first ORB matches for each candidate
@@ -284,6 +278,7 @@ bool LoopClosing::ComputeSim3()
 
     // Perform alternatively RANSAC iterations for each candidate
     // until one is succesful or all fail
+
     while(nCandidates>0 && !bMatch)
     {
         for(int i=0; i<nInitialCandidates; i++)
@@ -329,7 +324,7 @@ bool LoopClosing::ComputeSim3()
                 // If optimization is succesful stop ransacs and continue
                 if(nInliers>=20)
                 {
-                    bMatch = true;
+                   bMatch = true;
                     mpMatchedKF = pKF;
                     g2o::Sim3 gSmw(Converter::toMatrix3d(pKF->GetRotation()),Converter::toVector3d(pKF->GetTranslation()),1.0);
                     mg2oScw = gScm*gSmw;
@@ -661,8 +656,10 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
 
         if(!mbStopGBA)
         {
+            mpPointCloudMapping->setGBAState(PointCloudMapping::GBAState::RUNNING);
             cout << "Global Bundle Adjustment finished" << endl;
             cout << "Updating map ..." << endl;
+
             mpLocalMapper->RequestStop();
             // Wait until Local Mapping has effectively stopped
 
@@ -677,6 +674,7 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
             // Correct keyframes starting at map first keyframe
             list<KeyFrame*> lpKFtoCheck(mpMap->mvpKeyFrameOrigins.begin(),mpMap->mvpKeyFrameOrigins.end());
 
+            int kfcount = 0;
             while(!lpKFtoCheck.empty())
             {
                 KeyFrame* pKF = lpKFtoCheck.front();
@@ -696,7 +694,13 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
                 }
 
                 pKF->mTcwBefGBA = pKF->GetPose();
+
+                kfcount++;
                 pKF->SetPose(pKF->mTcwGBA);
+
+                //add to GBA kf of pointcloudmapping
+                mpPointCloudMapping->AddGBAKeyFrameId(pKF->mnId);
+
                 lpKFtoCheck.pop_front();
             }
 
@@ -740,6 +744,8 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
             mpMap->InformNewBigChange();
 
             mpLocalMapper->Release();
+
+            mpPointCloudMapping->setGBAState(PointCloudMapping::GBAState::FINISH);
 
             cout << "Map updated!" << endl;
         }

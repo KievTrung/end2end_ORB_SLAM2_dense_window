@@ -26,12 +26,19 @@
 #include <pcl/point_types.h>
 #include <pcl/filters/voxel_grid.h>
 #include <condition_variable>
+#include <unordered_set>
 
 using namespace ORB_SLAM2;
 
 class PointCloudMapping
 {
 public:
+    enum GBAState {
+        NOT_ACTIVE = 0,
+        RUNNING = 1,
+        FINISH = 2
+    };
+
     typedef pcl::PointXYZRGBA PointT;
     typedef pcl::PointCloud<PointT> PointCloud;
     
@@ -40,6 +47,10 @@ public:
     void insertKeyFrame( KeyFrame* kf, cv::Mat& color, cv::Mat& depth );
     void shutdown();
     void viewer();
+    void AddGBAKeyFrameId(int nmId);
+    void setGBAState(GBAState s);
+    
+    
     
 protected:
     PointCloud::Ptr generatePointCloud(KeyFrame* kf, cv::Mat& color, cv::Mat& depth);
@@ -59,6 +70,13 @@ protected:
     vector<cv::Mat>         depthImgs;
     mutex                   keyframeMutex;
     uint16_t                lastKeyframeSize =0;
+
+    //ids of global bundle adjustment key frames
+    unordered_set<int> mvGBAKFs;
+    mutex GBAKFmutex;
+
+    GBAState meGBAState = NOT_ACTIVE;
+    mutex   GBAMutex;  
     
     double resolution = 0.04;
     pcl::VoxelGrid<PointT>  voxel;

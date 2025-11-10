@@ -291,6 +291,7 @@ void Tracking::Track()
             mlpTemporalPoints.clear();
 
             // Check if we need to insert a new keyframe
+
             if(NeedNewKeyFrame())
                 CreateNewKeyFrame();
 
@@ -479,7 +480,7 @@ void Tracking::UpdateLastFrame()
 
     mLastFrame.SetPose(Tlr*pRef->GetPose());
 
-    if(mnLastKeyFrameId==mLastFrame.mnId || mSensor==System::MONOCULAR)
+    if(mnLastKeyFrameId==mLastFrame.mnId || mSensor==System::MONOCULAR || !mbOnlyTracking)
         return;
 
     // Create "visual odometry" MapPoints
@@ -689,19 +690,14 @@ bool Tracking::NeedNewKeyFrame()
     if(nKFs<2)
         thRefRatio = 0.4f;
 
-	float thMapRatio = 0.35f;
-    if(mnMatchesInliers>300)
-        thMapRatio = 0.20f;
-
-
     // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
     const bool c1a = mCurrentFrame.mnId>=mnLastKeyFrameId+mMaxFrames;
 
     // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
-    const bool c1b = (mCurrentFrame.mnId>=mnLastKeyFrameId+mMinFrames && bLocalMappingIdle);
+    const bool c1b =  (mCurrentFrame.mnId>=mnLastKeyFrameId+mMinFrames && bLocalMappingIdle);
 
     //Condition 1c: tracking is weak
-	const bool c1c =  mSensor!=System::MONOCULAR && (mnMatchesInliers<nRefMatches*0.25 || bNeedToInsertClose) ;
+	const bool c1c =  (mnMatchesInliers<nRefMatches*0.25 || bNeedToInsertClose);
 
     // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
     const bool c2 = ((mnMatchesInliers<nRefMatches*thRefRatio|| bNeedToInsertClose) && mnMatchesInliers>15);
@@ -712,15 +708,13 @@ bool Tracking::NeedNewKeyFrame()
         // If the mapping accepts keyframes, insert keyframe.
         // Otherwise send a signal to interrupt BA
         if(bLocalMappingIdle)
-        {
             return true;
-        }
         else
         {
             mpLocalMapper->InterruptBA();
-			if(mpLocalMapper->KeyframesInQueue()<3)
+            if (mpLocalMapper->KeyframesInQueue() < 3)
 				return true;
-			else
+            else
 				return false;
         }
     }
@@ -730,6 +724,9 @@ bool Tracking::NeedNewKeyFrame()
 
 void Tracking::CreateNewKeyFrame()
 {
+    //kfcount++;
+    //cout<<"tracking add : "<<mCurrentFrame.mnId << ", kfcount: " << kfcount << endl;
+
     if(!mpLocalMapper->SetNotStop(true))
         return;
 
@@ -796,7 +793,6 @@ void Tracking::CreateNewKeyFrame()
 				break;
 		}
 	}
-
     mpLocalMapper->InsertKeyFrame(pKF, this->mImRGB, this->mImDepth);
     mpLocalMapper->SetNotStop(false);
 
@@ -1174,7 +1170,7 @@ void Tracking::Reset()
     {
         mpViewer->RequestStop();
         while(!mpViewer->isStopped())
-            usleep(3000);
+            usleep(1000);
     }
 
     // Reset Local Mapping

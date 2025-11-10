@@ -32,6 +32,9 @@
 #include <thread>
 #include <mutex>
 #include "Thirdparty/g2o/g2o/types/types_seven_dof_expmap.h"
+#include "pointcloudmapping.h"
+
+class PointCloudMapping;
 
 namespace ORB_SLAM2
 {
@@ -51,7 +54,7 @@ public:
 
 public:
 
-    LoopClosing(Map* pMap, KeyFrameDatabase* pDB, ORBVocabulary* pVoc,const bool bFixScale);
+    LoopClosing(Map* pMap, KeyFrameDatabase* pDB, ORBVocabulary* pVoc,const bool bFixScale, std::shared_ptr<PointCloudMapping> pPointCloud);
 
     void SetTracker(Tracking* pTracker);
 
@@ -142,8 +145,9 @@ protected:
     // Fix scale in the stereo/RGB-D case
     bool mbFixScale;
 
-
     int mnFullBAIdx;
+    
+    std::shared_ptr<PointCloudMapping> mpPointCloudMapping;
 };
 
 } //namespace ORB_SLAM
