@@ -18,14 +18,15 @@
  */
 
 #include "pointcloudmapping.h"
-#include <KeyFrame.h>
+#include "KeyFrame.h"
+#include "Converter.h"
+#include "ORBmatcher.h"
 #include <opencv2/highgui/highgui.hpp>
 #include <pcl/visualization/cloud_viewer.h>
 #include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/io/pcd_io.h>
 #include <chrono>
-#include "Converter.h"
 
 PointCloudMapping::PointCloudMapping(double resolution_)
 {
@@ -110,8 +111,10 @@ void PointCloudMapping::viewer()
 	voxel_filter.setLeafSize(resolution, resolution, resolution);
 
 	pcl::StatisticalOutlierRemoval<PointT> statistical_filter;
-	statistical_filter.setMeanK(45);
+	statistical_filter.setMeanK(50);
 	statistical_filter.setStddevMulThresh(1.0);
+
+    ORBmatcher matcher(0.6, true);
 
     while(1)
     {
@@ -135,23 +138,43 @@ void PointCloudMapping::viewer()
             N = keyframes.size();
         }
         
-        for ( size_t i=lastKeyframeSize; i<N ; i++ )
-        {
-            PointCloud::Ptr p = generatePointCloud( keyframes[i], colorImgs[i], depthImgs[i] );
+   //     for ( size_t i=lastKeyframeSize; i<N ; i++ )
+   //     {
+   //         PointCloud::Ptr p = generatePointCloud( keyframes[i], colorImg1s[i], depthImgs[i] );
 
-			PointCloud::Ptr tmp(new PointCloud());
-			statistical_filter.setInputCloud(p);
-			statistical_filter.filter(*tmp);
+			//PointCloud::Ptr tmp(new PointCloud());
+			//statistical_filter.setInputCloud(p);
+			//statistical_filter.filter(*tmp);
 
-			(*globalMap) += *tmp;
-            
-            tmp = std::make_shared<PointCloud>();
-			voxel_filter.setInputCloud(globalMap);
-			voxel_filter.filter(*tmp);
-			tmp->swap(*globalMap);
+			//(*globalMap) += *tmp;
+   //         
+   //         tmp = std::make_shared<PointCloud>();
+			//voxel_filter.setInputCloud(globalMap);
+			//voxel_filter.filter(*tmp);
+			//tmp->swap(*globalMap);
+   //     }
+		PointCloud::Ptr p = generatePointCloud( keyframes[N-1], colorImgs[N-1], depthImgs[N-1] );
+
+        if (N > 1) {
+			vector<MapPoint*> vpMapPointMatches;
+			int nmatches = matcher.SearchByBoW(keyframes[N-1], keyframes[N-2], vpMapPointMatches);
+
+            cout << nmatches << " matches, kf: " << keyframes[N-1]->mnId << ", kf: " << keyframes[N - 2]->mnId << "\n";
         }
 
+		PointCloud::Ptr tmp(new PointCloud());
+		statistical_filter.setInputCloud(p);
+		statistical_filter.filter(*tmp);
+
+		(*globalMap) += *tmp;
+		
+		//tmp = std::make_shared<PointCloud>();
+		//voxel_filter.setInputCloud(p);
+		//voxel_filter.filter(*tmp);
+		//tmp->swap(*globalMap);
+
         viewer.showCloud( globalMap );
+		globalMap->clear();
         lastKeyframeSize = N;
     }
 
