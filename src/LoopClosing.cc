@@ -231,7 +231,7 @@ bool LoopClosing::ComputeSim3()
 
     // We compute first ORB matches for each candidate
     // If enough matches are found, we setup a Sim3Solver
-    ORBmatcher matcher(0.75,true);
+    ORBmatcher matcher(0.8,true);
 
     vector<Sim3Solver*> vpSim3Solvers;
     vpSim3Solvers.resize(nInitialCandidates);
@@ -244,6 +244,7 @@ bool LoopClosing::ComputeSim3()
 
     int nCandidates=0; //candidates with enough matches
 
+    int minInliners = 20;
     for(int i=0; i<nInitialCandidates; i++)
     {
         KeyFrame* pKF = mvpEnoughConsistentCandidates[i];
@@ -259,7 +260,7 @@ bool LoopClosing::ComputeSim3()
 
         int nmatches = matcher.SearchByBoW(mpCurrentKF,pKF,vvpMapPointMatches[i]);
 
-        if(nmatches<20)
+        if(nmatches<minInliners)
         {
             vbDiscarded[i] = true;
             continue;
@@ -267,7 +268,7 @@ bool LoopClosing::ComputeSim3()
         else
         {
             Sim3Solver* pSolver = new Sim3Solver(mpCurrentKF,pKF,vvpMapPointMatches[i],mbFixScale);
-            pSolver->SetRansacParameters(0.99,20,300);
+            pSolver->SetRansacParameters(0.99,minInliners,300);
             vpSim3Solvers[i] = pSolver;
         }
 
@@ -421,7 +422,7 @@ void LoopClosing::CorrectLoop()
     // Wait until Local Mapping has effectively stopped
     while(!mpLocalMapper->isStopped())
     {
-        usleep(1000);
+        usleep(500);
     }
 
     // Ensure current keyframe is updated

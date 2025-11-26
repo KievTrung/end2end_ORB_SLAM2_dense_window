@@ -429,22 +429,18 @@ bool Tracking::TrackReferenceKeyFrame()
 
     // We perform first an ORB matching with the reference keyframe
     // If enough matches are found we setup a PnP solver
-    ORBmatcher matcher(0.7,true);
+    ORBmatcher matcher(0.8,true);
     vector<MapPoint*> vpMapPointMatches;
 
     int nmatches = matcher.SearchByBoW(mpReferenceKF,mCurrentFrame,vpMapPointMatches);
 
-    if(nmatches<15)
+    if (nmatches < 15)
         return false;
 
     mCurrentFrame.mvpMapPoints = vpMapPointMatches;
     mCurrentFrame.SetPose(mLastFrame.mTcw);
     
-    //std::cout << "last: " << mLastFrame.mnId << "\n" << mLastFrame.mTcw << std::endl;
-
     Optimizer::PoseOptimization(&mCurrentFrame);
-
-    //std::cout << "current: " << mCurrentFrame.mnId << "\n" << mCurrentFrame.mTcw << std::endl;
 
     // Discard outliers
     int nmatchesMap = 0;
@@ -467,9 +463,9 @@ bool Tracking::TrackReferenceKeyFrame()
         }
     }
 
-    if (nmatchesMap>=10)
+	if (nmatches > 20)
 		return true;
-    return false;
+	return false;
 }
 
 void Tracking::UpdateLastFrame()
@@ -480,7 +476,7 @@ void Tracking::UpdateLastFrame()
 
     mLastFrame.SetPose(Tlr*pRef->GetPose());
 
-    if(mnLastKeyFrameId==mLastFrame.mnId || mSensor==System::MONOCULAR || !mbOnlyTracking)
+    if(mnLastKeyFrameId==mLastFrame.mnId || mSensor==System::MONOCULAR )
         return;
 
     // Create "visual odometry" MapPoints
@@ -562,7 +558,7 @@ bool Tracking::TrackWithMotionModel()
         nmatches = matcher.SearchByProjection(mCurrentFrame,mLastFrame,2*th,mSensor==System::MONOCULAR);
     }
 
-    if(nmatches<20)
+    if (nmatches < 20)
         return false;
 
     // Optimize frame pose with all matches
@@ -589,15 +585,10 @@ bool Tracking::TrackWithMotionModel()
         }
     }    
 
-    if(mbOnlyTracking)
-    {
-        mbVO = nmatchesMap<10;
-        if (nmatches > 20)
-            return true;
-        return false;
-    }
-
-    return nmatchesMap>=10;
+	mbVO = nmatchesMap<10;
+	if (nmatches > 20)
+		return true;
+	return false;
 }
 
 bool Tracking::TrackLocalMap()
@@ -613,24 +604,32 @@ bool Tracking::TrackLocalMap()
     Optimizer::PoseOptimization(&mCurrentFrame);
     mnMatchesInliers = 0;
 
+    int count = 0, outlier=0;
+
     // Update MapPoints Statistics
     for(int i=0; i<mCurrentFrame.N; i++)
     {
-        if(mCurrentFrame.mvpMapPoints[i])
+        if (mCurrentFrame.mvpMapPoints[i])
         {
-            if(!mCurrentFrame.mvbOutlier[i])
+            if (!mCurrentFrame.mvbOutlier[i])
             {
                 mCurrentFrame.mvpMapPoints[i]->IncreaseFound();
-                if(!mbOnlyTracking)
+                if (!mbOnlyTracking)
                 {
-                    if(mCurrentFrame.mvpMapPoints[i]->Observations()>0)
+                    if (mCurrentFrame.mvpMapPoints[i]->Observations() > 0)
                         mnMatchesInliers++;
                 }
                 else
                     mnMatchesInliers++;
             }
+            else
+                outlier++;
         }
+        else
+            count++;
     }
+
+	cout << "frame: " << mCurrentFrame.mnId << ", points: " << mnMatchesInliers << ", count: " << count << ", outlier: " << outlier << endl;
 
     // Decide if the tracking was succesful
     // More restrictive if there was a relocalization recently

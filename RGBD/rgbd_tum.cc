@@ -1,13 +1,18 @@
 #include<iostream>
 #include<algorithm>
 #include<fstream>
+#include<sstream>
+#include<iomanip>
 #include<chrono>
 #include<opencv2/core/core.hpp>
+#include<opencv2/imgproc.hpp>
+//#include <opencv2/ximgproc/edge_filter.hpp>
 #include<System.h>
 
 using namespace std;
 
 bool loadImages(const string& pathToSequenceImg, int imgId, cv::Mat& rgb, cv::Mat &depth);
+std::string padNum(int value, int width);
 
 int main(int argc, char **argv)
 {
@@ -38,8 +43,12 @@ int main(int argc, char **argv)
 
         std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
 
+        //cv::Mat output;
+        //cv::ximgproc::guidedFilter(color, depth, depth_smoothed, 9, 0.01);
+        //cv::bilateralFilter(imD, output, 9, 0.05, 5);
+
         // Pass the image to the SLAM system
-        SLAM.TrackRGBD(imRGB,imD,tframe);
+        SLAM.TrackRGBD(imRGB, imD,tframe);
 
         std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
 
@@ -68,15 +77,24 @@ int main(int argc, char **argv)
 
 bool loadImages(const string& pathToSequenceImg, int imgId, cv::Mat& rgb, cv::Mat &depth)
 {
-    rgb = cv::imread(pathToSequenceImg + "\\f_rgb\\" + to_string(imgId) + ".png", CV_LOAD_IMAGE_UNCHANGED);
+    std::string num = padNum(imgId, 6);
+
+    rgb = cv::imread(pathToSequenceImg + "\\f_rgb\\" + num + ".png");
 
     if (rgb.empty())
         return false;
 
-    depth = cv::imread(pathToSequenceImg + "\\f_depth\\" + to_string(imgId) + ".png", CV_LOAD_IMAGE_UNCHANGED);
+    depth = cv::imread(pathToSequenceImg + "\\f_depth\\" + num + ".png", CV_LOAD_IMAGE_UNCHANGED);
     
     if (depth.empty())
         return false;
 
     return true;
+}
+
+std::string padNum(int value, int width) 
+{
+    std::ostringstream ss;
+    ss << std::setfill('0') << std::setw(width) << value;
+    return ss.str();
 }

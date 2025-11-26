@@ -28,6 +28,7 @@
 #include <pcl/io/pcd_io.h>
 #include <chrono>
 
+
 PointCloudMapping::PointCloudMapping(double resolution_)
 {
     this->resolution = resolution_;
@@ -68,21 +69,23 @@ void PointCloudMapping::setGBAState(GBAState s){
     meGBAState = s;
 }
 
-pcl::PointCloud< PointCloudMapping::PointT >::Ptr PointCloudMapping::generatePointCloud(KeyFrame* kf, cv::Mat& color, cv::Mat& depth)
+pcl::PointCloud< PointT >::Ptr PointCloudMapping::generatePointCloud(KeyFrame* kf, cv::Mat& color, cv::Mat& depth)
 {
     PointCloud::Ptr tmp( new PointCloud() );
-    // point cloud is null ptr
+
     for ( int m=0; m<depth.rows; m+=3 )
     {
         for ( int n=0; n<depth.cols; n+=3 )
         {
             float d = depth.ptr<float>(m)[n];
-            if (d < 0.01 || d>10)
+            if (d < 0.01)
                 continue;
+            
             PointT p;
             p.z = d;
             p.x = ( n - kf->cx) * p.z / kf->fx;
             p.y = ( m - kf->cy) * p.z / kf->fy;
+
             
             p.b = color.ptr<uchar>(m)[n*3];
             p.g = color.ptr<uchar>(m)[n*3+1];
@@ -100,21 +103,73 @@ pcl::PointCloud< PointCloudMapping::PointT >::Ptr PointCloudMapping::generatePoi
     return cloud;
 }
 
+struct UserData {
+    bool followCam = true;
+    double dist = 7.;
+    double movx = 0.;
+    double movy = 0.;
+};
+
+void keyboardEvent(const pcl::visualization::KeyboardEvent &event, void *user_data)
+{
+    if (!event.keyDown()) return;
+
+	std::cout << "key press!" << std::endl;
+
+    auto data = static_cast<UserData*>(user_data);
+    double mov_amount = 0.3;
+
+    if (event.getKeySym() == "v") {
+
+        data->followCam = data->followCam ? false : true;
+        data->movx = 0.;
+        data->movy = 0.;
+		data->dist = 7.;
+        std::cout << "Camera moved to passed pose!" << std::endl;
+    }
+    else if (event.getKeySym() == "Down") {
+
+        data->dist += 1;
+        std::cout << "Camera moved to further!" << std::endl;
+    }
+    else if (event.getKeySym() == "Up") {
+
+        data->dist -= 1;
+        std::cout << "Camera moved to nearer!" << std::endl;
+    }
+    else if (event.getKeySym() == "w") {
+
+        data->movx += mov_amount;
+        std::cout << "Camera moved to up!" << std::endl;
+    }
+    else if (event.getKeySym() == "s") {
+
+        data->movx -= mov_amount;
+        std::cout << "Camera moved to down!" << std::endl;
+    }
+    else if (event.getKeySym() == "a") {
+
+        data->movy += mov_amount;
+        std::cout << "Camera moved to left!" << std::endl;
+    }
+    else if (event.getKeySym() == "d") {
+
+        data->movy -= mov_amount;
+        std::cout << "Camera moved to right!" << std::endl;
+    }
+}
+
 
 void PointCloudMapping::viewer()
 {
-    pcl::visualization::CloudViewer viewer("viewer");
+    pcl::visualization::PCLVisualizer viewer("viewer");
+    UserData userdata;
 
-    // voxel filter
-	pcl::VoxelGrid<PointT> voxel_filter;
-	double resolution = 0.015;
-	voxel_filter.setLeafSize(resolution, resolution, resolution);
+    viewer.registerKeyboardCallback(keyboardEvent, (void*)&userdata);
 
-	pcl::StatisticalOutlierRemoval<PointT> statistical_filter;
-	statistical_filter.setMeanK(50);
-	statistical_filter.setStddevMulThresh(1.0);
-
-    ORBmatcher matcher(0.6, true);
+ //   pcl::StatisticalOutlierRemoval<PointT> statistical_filter;
+	//statistical_filter.setMeanK(40);
+	//statistical_filter.setStddevMulThresh(1.0);
 
     while(1)
     {
@@ -125,8 +180,7 @@ void PointCloudMapping::viewer()
                 break;
             }
         }
-        
-        {
+		{
             unique_lock<mutex> lck_keyframeUpdated( keyFrameUpdateMutex );
             keyFrameUpdated.wait( lck_keyframeUpdated );
         }
@@ -138,97 +192,46 @@ void PointCloudMapping::viewer()
             N = keyframes.size();
         }
         
-   //     for ( size_t i=lastKeyframeSize; i<N ; i++ )
-   //     {
-   //         PointCloud::Ptr p = generatePointCloud( keyframes[i], colorImg1s[i], depthImgs[i] );
+        for ( size_t i=lastKeyframeSize; i<N ; i++ )
+        { 
+            Eigen::Isometry3d T = ORB_SLAM2::Converter::toSE3Quat( keyframes[i]->GetPose() );
+            PointCloud::Ptr tmp = generatePointCloud( keyframes[i], colorImgs[i], depthImgs[i]);
 
-			//PointCloud::Ptr tmp(new PointCloud());
-			//statistical_filter.setInputCloud(p);
-			//statistical_filter.filter(*tmp);
+            *(globalMap) += *tmp;
 
-			//(*globalMap) += *tmp;
-   //         
-   //         tmp = std::make_shared<PointCloud>();
-			//voxel_filter.setInputCloud(globalMap);
-			//voxel_filter.filter(*tmp);
-			//tmp->swap(*globalMap);
-   //     }
-		PointCloud::Ptr p = generatePointCloud( keyframes[N-1], colorImgs[N-1], depthImgs[N-1] );
+            // camera → world transform
+			Eigen::Isometry3d twc = T.inverse();
 
-        if (N > 1) {
-			vector<MapPoint*> vpMapPointMatches;
-			int nmatches = matcher.SearchByBoW(keyframes[N-1], keyframes[N-2], vpMapPointMatches);
+			//// camera center
+			Eigen::Vector3d cam_pos = twc.translation();
 
-            cout << nmatches << " matches, kf: " << keyframes[N-1]->mnId << ", kf: " << keyframes[N - 2]->mnId << "\n";
+			//// camera forward (look direction)
+			Eigen::Vector3d forward = twc.rotation() * Eigen::Vector3d(0, 0, 1);
+
+			Eigen::Vector3d cam_pos_far = cam_pos - forward.normalized() * userdata.dist;
+
+			Eigen::Vector3d look_at = cam_pos + forward;
+
+			//// camera up
+			Eigen::Vector3d up_dir = twc.rotation() * Eigen::Vector3d(0, -1, 0);
+
+            if (i == 0)
+                viewer.addPointCloud(tmp, "cloud");
+            else
+                viewer.updatePointCloud(tmp, "cloud");
+
+            if (userdata.followCam) {
+				viewer.setCameraPosition(
+					cam_pos_far.x() + userdata.movy, cam_pos_far.y() + userdata.movx, cam_pos_far.z(),
+					look_at.x(), look_at.y(), look_at.z(),
+					up_dir.x(), up_dir.y(), up_dir.z()
+				);
+            }
+
+			viewer.spinOnce(40);
         }
-
-		PointCloud::Ptr tmp(new PointCloud());
-		statistical_filter.setInputCloud(p);
-		statistical_filter.filter(*tmp);
-
-		(*globalMap) += *tmp;
-		
-		//tmp = std::make_shared<PointCloud>();
-		//voxel_filter.setInputCloud(p);
-		//voxel_filter.filter(*tmp);
-		//tmp->swap(*globalMap);
-
-        viewer.showCloud( globalMap );
-		globalMap->clear();
-        lastKeyframeSize = N;
+		lastKeyframeSize = N;
     }
-
-
-    { 
-        unique_lock<std::mutex> lock(GBAMutex);
-        if (meGBAState == NOT_ACTIVE) {
-			cout << "saving map ..." << endl;
-			pcl::io::savePCDFileBinary("map.pcd", *globalMap);
-			cout << "saved ..." << endl;
-            return;
-        }
-        else {
-			cout << "wait for GBA to finish.." << endl;
-			while(meGBAState == RUNNING)
-				std::this_thread::sleep_for(std::chrono::seconds(1)); 
-        }
-    }   
-
-    
-    cout << "redraw global map.." << endl;
-    globalMap->clear();
-
-	statistical_filter.setMeanK(30);
-	resolution = 0.017;
-	voxel_filter.setLeafSize(resolution, resolution, resolution);
-
-	for ( size_t i=0; i<keyframes.size(); i++ )
-	{
-        KeyFrame* pKF = keyframes[i];
-
-        if (mvGBAKFs.find(pKF->mnId) != mvGBAKFs.end()) {
-			PointCloud::Ptr p = generatePointCloud( pKF, colorImgs[i], depthImgs[i] );
-
-			PointCloud::Ptr tmp(new PointCloud());
-			pcl::StatisticalOutlierRemoval<PointT> statistical_filter;
-			statistical_filter.setInputCloud(p);
-			statistical_filter.filter(*tmp);
-
-			(*globalMap) += *tmp;
-			
-			tmp = std::make_shared<PointCloud>();
-			voxel_filter.setInputCloud(globalMap);
-			voxel_filter.filter(*tmp);
-			tmp->swap(*globalMap);
-
-			viewer.showCloud( globalMap );
-        }
-	}
-
-	PointCloud::Ptr tmp(new PointCloud());
-	statistical_filter.setInputCloud(globalMap);
-	statistical_filter.filter(*tmp);
-	tmp->swap(*globalMap);
 
     cout << "saving map ..." << endl;
     pcl::io::savePCDFileBinary("map.pcd", *globalMap);

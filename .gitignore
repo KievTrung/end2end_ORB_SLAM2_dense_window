@@ -399,3 +399,4 @@ RGBD/*.txt
 # python code
 Monocular-Depth-Based-3D-Scene-Reconstruction-Using-Mobile-Camera/
 
+RGBD/*

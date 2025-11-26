@@ -27,6 +27,7 @@
 #include <pcl/filters/voxel_grid.h>
 #include <condition_variable>
 #include <unordered_set>
+#include "MultiViewFusion.h"
 
 using namespace ORB_SLAM2;
 
@@ -39,17 +40,13 @@ public:
         FINISH = 2
     };
 
-    typedef pcl::PointXYZRGBA PointT;
-    typedef pcl::PointCloud<PointT> PointCloud;
-    
     PointCloudMapping( double resolution_ );
     
-    void insertKeyFrame( KeyFrame* kf, cv::Mat& color, cv::Mat& depth );
+    void insertKeyFrame( KeyFrame* kf, cv::Mat& color, cv::Mat& depth);
     void shutdown();
     void viewer();
     void AddGBAKeyFrameId(int nmId);
     void setGBAState(GBAState s);
-    
     
     
 protected:

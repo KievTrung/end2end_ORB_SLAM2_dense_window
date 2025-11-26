@@ -27,12 +27,7 @@
 
 #include "Thirdparty/DBoW2/DBoW2/FeatureVector.h"
 
-#if defined(_WIN32) or defined(_WIN64)
 #include<stdint.h>
-#else
-#include<stdint-gcc.h>
-#endif
-
 
 using namespace std;
 

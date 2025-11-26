@@ -107,6 +107,9 @@ target_link_libraries(rgbd_tum ${PROJECT_NAME})
 add_executable(rgb_tumd RGBD/rgb_tumd.cc)
 target_link_libraries(rgb_tumd ${PROJECT_NAME})
 
+add_executable(rgbd_kitti RGBD/rgbd_kitti.cc)
+target_link_libraries(rgbd_kitti ${PROJECT_NAME})
+
 #Build tools
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/tools)
 add_executable(bin_vocabulary tools/bin_vocabulary.cc)
